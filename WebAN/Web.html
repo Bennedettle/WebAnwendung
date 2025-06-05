@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Vier Gewinnt</title>
+  <title>Vier Gewinnt Online</title>
   <style>
     body {
       margin: 0;
@@ -26,7 +26,7 @@
   </style>
 </head>
 <body>
-  <div id="status">Spieler Rot beginnt</div>
+  <div id="status">Warte auf zweiten Spieler...</div>
   <canvas id="canvas" width="700" height="600"></canvas>
 
   <script>
@@ -34,40 +34,72 @@
     const ctx = canvas.getContext('2d');
     const statusElem = document.getElementById('status');
 
-    const COLS = 7;
-    const ROWS = 6;
-    const CELL_SIZE = 100;
-    const RADIUS = 40;
-
-    const EMPTY = 0;
-    const RED = 1;
-    const YELLOW = 2;
+    const COLS = 7, ROWS = 6, CELL_SIZE = 100, RADIUS = 40;
+    const EMPTY = 0, RED = 1, YELLOW = 2;
 
     let board = Array.from({ length: ROWS }, () => Array(COLS).fill(EMPTY));
+    let myColor = null;
     let currentPlayer = RED;
     let gameOver = false;
 
-    canvas.addEventListener('click', handleClick);
-    drawBoard();
+    const socket = new WebSocket('wss://nosch.uber.space/web-rooms/');
 
-    function handleClick(e) {
-      if (gameOver) return;
+    socket.addEventListener('open', () => {
+      sendRequest('*enter-room*', 'vier-gewinnt');
+    });
+
+    socket.addEventListener('message', event => {
+      const msg = JSON.parse(event.data);
+      const type = msg[0];
+
+      switch (type) {
+        case '*client-id*':
+          const clientId = msg[1];
+          myColor = clientId === 0 ? RED : YELLOW;
+          if (myColor === RED) statusElem.textContent = 'Du bist Rot. Du beginnst!';
+          else statusElem.textContent = 'Du bist Gelb. Bitte warten...';
+          break;
+
+        case 'move':
+          const [_, col, color] = msg;
+          makeMove(col, color);
+          break;
+
+        case '*error*':
+          console.warn('Serverfehler:', ...msg[1]);
+          break;
+      }
+    });
+
+    canvas.addEventListener('click', (e) => {
+      if (gameOver || currentPlayer !== myColor) return;
 
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const col = Math.floor(x / CELL_SIZE);
 
+      if (isColumnPlayable(col)) {
+        sendRequest('move', col, myColor);
+      }
+    });
+
+    function isColumnPlayable(col) {
+      return board[0][col] === EMPTY;
+    }
+
+    function makeMove(col, color) {
       for (let row = ROWS - 1; row >= 0; row--) {
         if (board[row][col] === EMPTY) {
-          board[row][col] = currentPlayer;
+          board[row][col] = color;
           drawBoard();
 
           if (checkWin(row, col)) {
             gameOver = true;
-            statusElem.textContent = `Spieler ${currentPlayer === RED ? 'Rot' : 'Gelb'} gewinnt!`;
+            statusElem.textContent = color === myColor ? 'Du hast gewonnen!' : 'Du hast verloren!';
           } else {
-            currentPlayer = currentPlayer === RED ? YELLOW : RED;
-            statusElem.textContent = `Spieler ${currentPlayer === RED ? 'Rot' : 'Gelb'} ist am Zug`;
+            currentPlayer = color === RED ? YELLOW : RED;
+            statusElem.textContent =
+              currentPlayer === myColor ? 'Du bist dran!' : 'Warte auf Gegner...';
           }
           return;
         }
@@ -96,23 +128,21 @@
 
     function checkWin(row, col) {
       const color = board[row][col];
-      return checkDirection(row, col, 1, 0, color) || // horizontal
-             checkDirection(row, col, 0, 1, color) || // vertical
-             checkDirection(row, col, 1, 1, color) || // diagonal /
-             checkDirection(row, col, 1, -1, color);  // diagonal \
+      return checkDir(row, col, 1, 0, color) ||
+             checkDir(row, col, 0, 1, color) ||
+             checkDir(row, col, 1, 1, color) ||
+             checkDir(row, col, 1, -1, color);
     }
 
-    function checkDirection(row, col, dr, dc, color) {
+    function checkDir(row, col, dr, dc, color) {
       let count = 1;
-      count += countInDir(row, col, dr, dc, color);
-      count += countInDir(row, col, -dr, -dc, color);
+      count += countInDirection(row, col, dr, dc, color);
+      count += countInDirection(row, col, -dr, -dc, color);
       return count >= 4;
     }
 
-    function countInDir(row, col, dr, dc, color) {
-      let r = row + dr;
-      let c = col + dc;
-      let count = 0;
+    function countInDirection(row, col, dr, dc, color) {
+      let r = row + dr, c = col + dc, count = 0;
       while (r >= 0 && r < ROWS && c >= 0 && c < COLS && board[r][c] === color) {
         count++;
         r += dr;
@@ -120,9 +150,10 @@
       }
       return count;
     }
-    //lul//
+
+    function sendRequest(...msg) {
+      socket.send(JSON.stringify(msg));
+    }
   </script>
 </body>
 </html>
-
-//lul//
