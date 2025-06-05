@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Vier Gewinnt</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #222;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      border: 2px solid white;
+      background: #0055aa;
+      touch-action: none;
+    }
+    #status {
+      margin: 10px;
+      font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div id="status">Spieler Rot beginnt</div>
+  <canvas id="canvas" width="700" height="600"></canvas>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const statusElem = document.getElementById('status');
+
+    const COLS = 7;
+    const ROWS = 6;
+    const CELL_SIZE = 100;
+    const RADIUS = 40;
+
+    const EMPTY = 0;
+    const RED = 1;
+    const YELLOW = 2;
+
+    let board = Array.from({ length: ROWS }, () => Array(COLS).fill(EMPTY));
+    let currentPlayer = RED;
+    let gameOver = false;
+
+    canvas.addEventListener('click', handleClick);
+    drawBoard();
+
+    function handleClick(e) {
+      if (gameOver) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const col = Math.floor(x / CELL_SIZE);
+
+      for (let row = ROWS - 1; row >= 0; row--) {
+        if (board[row][col] === EMPTY) {
+          board[row][col] = currentPlayer;
+          drawBoard();
+
+          if (checkWin(row, col)) {
+            gameOver = true;
+            statusElem.textContent = `Spieler ${currentPlayer === RED ? 'Rot' : 'Gelb'} gewinnt!`;
+          } else {
+            currentPlayer = currentPlayer === RED ? YELLOW : RED;
+            statusElem.textContent = `Spieler ${currentPlayer === RED ? 'Rot' : 'Gelb'} ist am Zug`;
+          }
+          return;
+        }
+      }
+    }
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const x = c * CELL_SIZE + CELL_SIZE / 2;
+          const y = r * CELL_SIZE + CELL_SIZE / 2;
+          drawCircle(x, y, board[r][c]);
+        }
+      }
+    }
+
+    function drawCircle(x, y, state) {
+      ctx.beginPath();
+      ctx.arc(x, y, RADIUS, 0, 2 * Math.PI);
+      ctx.fillStyle = state === RED ? 'red' : state === YELLOW ? 'yellow' : 'white';
+      ctx.fill();
+      ctx.strokeStyle = 'black';
+      ctx.stroke();
+    }
+
+    function checkWin(row, col) {
+      const color = board[row][col];
+      return checkDirection(row, col, 1, 0, color) || // horizontal
+             checkDirection(row, col, 0, 1, color) || // vertical
+             checkDirection(row, col, 1, 1, color) || // diagonal /
+             checkDirection(row, col, 1, -1, color);  // diagonal \
+    }
+
+    function checkDirection(row, col, dr, dc, color) {
+      let count = 1;
+      count += countInDir(row, col, dr, dc, color);
+      count += countInDir(row, col, -dr, -dc, color);
+      return count >= 4;
+    }
+
+    function countInDir(row, col, dr, dc, color) {
+      let r = row + dr;
+      let c = col + dc;
+      let count = 0;
+      while (r >= 0 && r < ROWS && c >= 0 && c < COLS && board[r][c] === color) {
+        count++;
+        r += dr;
+        c += dc;
+      }
+      return count;
+    }
+  </script>
+</body>
+</html>
