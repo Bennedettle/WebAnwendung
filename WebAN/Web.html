@@ -45,7 +45,8 @@
 
     drawBoard();
 
-    const socket = new WebSocket('wss://nosch.uber.space/web-rooms/');
+    const webRoomsWebSocketServerAddr = 'https://nosch.uber.space/web-rooms/';
+    const socket = new WebSocket(webRoomsWebSocketServerAddr.replace(/^http/, 'ws'));
 
     socket.addEventListener('open', () => {
       sendRequest('*enter-room*', 'vier-gewinnt');
