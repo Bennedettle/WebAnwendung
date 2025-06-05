@@ -28,6 +28,7 @@
 <body>
   <div id="status">Warte auf zweiten Spieler...</div>
   <canvas id="canvas" width="700" height="600"></canvas>
+  <button id="restart" style="display:none;">Neustart</button>
 
   <script>
     const canvas = document.getElementById('canvas');
@@ -87,6 +88,19 @@
       return board[0][col] === EMPTY;
     }
 
+    const restartBtn = document.getElementById('restart');
+
+    function resetGame() {
+      board = Array.from({ length: ROWS }, () => Array(COLS).fill(EMPTY));
+      currentPlayer = RED;
+      gameOver = false;
+      drawBoard();
+      statusElem.textContent = myColor === RED ? 'Du bist Rot. Du beginnst!' : 'Du bist Gelb. Bitte warten...';
+      restartBtn.style.display = 'none';
+    }
+
+    restartBtn.addEventListener('click', resetGame);
+
     function makeMove(col, color) {
       for (let row = ROWS - 1; row >= 0; row--) {
         if (board[row][col] === EMPTY) {
@@ -96,6 +110,7 @@
           if (checkWin(row, col)) {
             gameOver = true;
             statusElem.textContent = color === myColor ? 'Du hast gewonnen!' : 'Du hast verloren!';
+            restartBtn.style.display = 'inline';
           } else {
             currentPlayer = color === RED ? YELLOW : RED;
             statusElem.textContent =
