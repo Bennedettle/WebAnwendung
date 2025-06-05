@@ -43,6 +43,8 @@
     let currentPlayer = RED;
     let gameOver = false;
 
+    drawBoard();
+
     const socket = new WebSocket('wss://nosch.uber.space/web-rooms/');
 
     socket.addEventListener('open', () => {
