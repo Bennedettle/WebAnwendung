@@ -29,7 +29,7 @@ let eventFields = []; // [{r, c, type}]
 const socket = new WebSocket(webRoomsWebSocketServerAddr);
 
 socket.addEventListener('open', () => {
-    sendRequest('*enter-room*', roomName);
+    sendRequest('*enter-room*', "vier gewinnt" + roomName);
     sendRequest('*subscribe-client-count*');
     setInterval(() => socket.send(''), 30000);
 });
