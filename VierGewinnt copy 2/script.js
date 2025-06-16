@@ -9,7 +9,9 @@ let gameOver = false;
 let myClientId = null;
 let myPlayerNumber = null;
 let clientCount = 0;
-let moveCount = 0; // NEU: Zähler für Züge
+let semesterCount = [0, 0]; // [Spieler1, Spieler2]
+let skipTurn = [false, false]; // Urlaubssemester
+let eventMessage = ""; // Für Event-Anzeige
 
 // WebSocket Setup
 const socket = new WebSocket(webRoomsWebSocketServerAddr);
@@ -130,6 +132,7 @@ function renderBoard() {
             content.appendChild(clickArea);
         }
     }
+
 }
 
 function getLowestEmptyRow(col) {
@@ -139,68 +142,155 @@ function getLowestEmptyRow(col) {
     return -1;
 }
 
+// Hilfsfunktion für Events
+function triggerRandomEvent(player) {
+    // 30% Chance auf ein Event
+    if (Math.random() < 0.3) {
+        const events = [
+            "bafög",
+            "urlaub",
+            "haertefall",
+            "drittversuch",
+            "dekan"
+        ];
+        const event = events[Math.floor(Math.random() * events.length)];
+        switch (event) {
+            case "bafög":
+                // Unterste Reihe löschen
+                for (let c = 0; c < COLS; c++) board[ROWS - 1][c] = 0;
+                eventMessage = "📉 Bafög gestrichen! Unterste Reihe verloren.";
+                break;
+            case "urlaub":
+                skipTurn[player - 1] = true;
+                eventMessage = "🧳 Urlaubssemester! Du musst eine Runde aussetzen.";
+                break;
+            case "haertefall":
+                // Härtefall: eigenen Stein verschieben
+                let ownStones = [];
+                for (let r = 0; r < ROWS; r++)
+                    for (let c = 0; c < COLS; c++)
+                        if (board[r][c] === player) ownStones.push({ r, c });
+                if (ownStones.length > 0) {
+                    let { r, c } = ownStones[Math.floor(Math.random() * ownStones.length)];
+                    board[r][c] = 0;
+                    let newCol = (c + 1) % COLS;
+                    let newRow = getLowestEmptyRow(newCol);
+                    if (newRow !== -1) board[newRow][newCol] = player;
+                    eventMessage = "🔁 Härtefallantrag! Ein Stein wurde verschoben.";
+                }
+                break;
+            case "drittversuch":
+                // Spieler darf nochmal ziehen, aber bei Fehlschlag wird ein Stein entfernt
+                eventMessage = "⚠️ Drittversuch! Du darfst nochmal ziehen, aber bei Fehlschlag verlierst du einen Stein.";
+                skipTurn[player - 1] = "drittversuch";
+                break;
+            case "dekan":
+                let tippCol = Math.floor(Math.random() * COLS) + 1;
+                eventMessage = `🧓 Studiendekan-Tipp: "Setze in Spalte ${tippCol}" (aber ist das richtig?)`;
+                break;
+        }
+    } else {
+        eventMessage = "";
+    }
+}
+
 function makeMove(col) {
     if (gameOver || myPlayerNumber !== currentPlayer) return;
+    if (skipTurn[currentPlayer - 1] === true) {
+        showMessage("Urlaubssemester! Du musst aussetzen.");
+        skipTurn[currentPlayer - 1] = false;
+        currentPlayer = 3 - currentPlayer;
+        sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, semesterCount, skipTurn, eventMessage }]);
+        renderBoard();
+        return;
+    }
     let row = getLowestEmptyRow(col);
     if (row === -1) return;
     board[row][col] = currentPlayer;
-    moveCount++; // NEU: Zähler erhöhen
+    semesterCount[currentPlayer - 1]++; // Semesterzähler erhöhen
 
-    // NEU: Nach jedem 5. Zug Chips der untersten Reihe nach oben verschieben
-    if (moveCount % 10 === 0) {
-        for (let c = 0; c < COLS; c++) {
-            if (board[ROWS - 1][c] !== 0) {
-                // Chip aus unterster Reihe holen
-                let chip = board[ROWS - 1][c];
-                // Unterste Reihe leeren
-                board[ROWS - 1][c] = 0;
-                // In oberste freie Position der Spalte setzen
-                for (let r = 0; r < ROWS; r++) {
-                    if (board[r][c] !== 0) {
-                        // Setze Chip eine Position darüber
-                        if (r > 0) board[r - 1][c] = chip;
-                        break;
-                    }
-                    // Wenn ganz oben noch frei
-                    if (r === ROWS - 1) board[r][c] = chip;
-                }
-                // Alle Chips darüber nach unten rutschen lassen
-                for (let r = ROWS - 2; r >= 0; r--) {
-                    if (board[r][c] !== 0 && board[r + 1][c] === 0) {
-                        board[r + 1][c] = board[r][c];
-                        board[r][c] = 0;
-                    }
-                }
+    // Ereignis-Engine
+    triggerRandomEvent(currentPlayer);
+
+    // Drittversuch-Logik
+    if (skipTurn[currentPlayer - 1] === "drittversuch") {
+        skipTurn[currentPlayer - 1] = false;
+        if (!checkWin(row, col, currentPlayer)) {
+            let ownStones = [];
+            for (let r = 0; r < ROWS; r++)
+                for (let c = 0; c < COLS; c++)
+                    if (board[r][c] === currentPlayer) ownStones.push({ r, c });
+            if (ownStones.length > 0) {
+                let { r, c } = ownStones[Math.floor(Math.random() * ownStones.length)];
+                board[r][c] = 0;
+                eventMessage += " Dein Stein wurde entfernt!";
             }
         }
     }
 
-    if (checkWin(row, col, currentPlayer)) {
+    // Regelstudienzeit: 20 Semester
+    if (semesterCount[currentPlayer - 1] >= 20) {
         gameOver = true;
-        showMessage(`Spieler ${currentPlayer} gewinnt!`);
+    } else if (checkWin(row, col, currentPlayer)) {
+        gameOver = true;
     } else if (isFull()) {
         gameOver = true;
-        showMessage("Unentschieden!");
     } else {
         currentPlayer = 3 - currentPlayer;
-        showMessage(`Spieler ${currentPlayer} ist am Zug`);
     }
-    sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, moveCount }]);
+    sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, semesterCount, skipTurn, eventMessage }]);
     renderBoard();
+    showGameStatus();
 }
 
 function receiveMove(data) {
     board = data.board;
     currentPlayer = data.currentPlayer;
     gameOver = data.gameOver;
-    moveCount = data.moveCount || moveCount; // NEU
+    semesterCount = data.semesterCount || [0, 0];
+    skipTurn = data.skipTurn || [false, false];
+    eventMessage = data.eventMessage || "";
     renderBoard();
+    showGameStatus();
+}
+
+function showGameStatus() {
     if (gameOver) {
-        if (isFull()) showMessage("Unentschieden!");
-        else showMessage(`Spieler ${currentPlayer} gewinnt!`);
+        // Gewinner ermitteln
+        let winner = null;
+        if (semesterCount[0] >= 20) winner = 1;
+        if (semesterCount[1] >= 20) winner = 2;
+        if (checkAnyWin()) winner = currentPlayer;
+
+        if (winner) {
+            if (myPlayerNumber === winner) {
+                showMessage("🎓 Bachelor erhalten! Studi-Legende!");
+            } else if (myPlayerNumber === 1 || myPlayerNumber === 2) {
+                showMessage("Exmatrikuliert! Zu viele Prüfungsversuche.");
+            } else {
+                showMessage("Spiel beendet.");
+            }
+        } else if (isFull()) {
+            showMessage("Unentschieden! Ihr bleibt ewige Studis.");
+        }
     } else {
-        showMessage(`Spieler ${currentPlayer} ist am Zug`);
+        showMessage(
+            (eventMessage ? eventMessage + "\n" : "") +
+            `Semester: ${semesterCount[0]} / ${semesterCount[1]}`
+        );
     }
+}
+
+// Hilfsfunktion: Gibt true zurück, wenn einer gewonnen hat
+function checkAnyWin() {
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (board[r][c] !== 0 && checkWin(r, c, board[r][c])) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 function addRestartButton() {
@@ -233,9 +323,11 @@ function receiveRestart(data) {
     board = data.board;
     currentPlayer = data.currentPlayer;
     gameOver = data.gameOver;
-    moveCount = 0; // NEU
+    semesterCount = [0, 0];
+    skipTurn = [false, false];
+    eventMessage = "";
     renderBoard();
-    showMessage("Spieler 1 ist am Zug");
+    showMessage("Neues Studium! Viel Erfolg!");
 }
 
 function isFull() {

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8">
+    <title>Vier Gewinnt</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://nosch.uber.space/web-rooms/web-rooms.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #content { pointer-events: none; }
+        .a-canvas { background: #222; }
+    </style>
+  </head>
+  <body>
+    <a-scene>
+        <a-entity id="content"></a-entity>
+        <a-camera>
+            <a-cursor></a-cursor>
+        </a-camera>
+    </a-scene>
+    <script src="script.js"></script>
+  </body>
+</html>

@@ -9,7 +9,6 @@ let gameOver = false;
 let myClientId = null;
 let myPlayerNumber = null;
 let clientCount = 0;
-let moveCount = 0; // NEU: Zähler für Züge
 
 // WebSocket Setup
 const socket = new WebSocket(webRoomsWebSocketServerAddr);
@@ -144,37 +143,6 @@ function makeMove(col) {
     let row = getLowestEmptyRow(col);
     if (row === -1) return;
     board[row][col] = currentPlayer;
-    moveCount++; // NEU: Zähler erhöhen
-
-    // NEU: Nach jedem 5. Zug Chips der untersten Reihe nach oben verschieben
-    if (moveCount % 10 === 0) {
-        for (let c = 0; c < COLS; c++) {
-            if (board[ROWS - 1][c] !== 0) {
-                // Chip aus unterster Reihe holen
-                let chip = board[ROWS - 1][c];
-                // Unterste Reihe leeren
-                board[ROWS - 1][c] = 0;
-                // In oberste freie Position der Spalte setzen
-                for (let r = 0; r < ROWS; r++) {
-                    if (board[r][c] !== 0) {
-                        // Setze Chip eine Position darüber
-                        if (r > 0) board[r - 1][c] = chip;
-                        break;
-                    }
-                    // Wenn ganz oben noch frei
-                    if (r === ROWS - 1) board[r][c] = chip;
-                }
-                // Alle Chips darüber nach unten rutschen lassen
-                for (let r = ROWS - 2; r >= 0; r--) {
-                    if (board[r][c] !== 0 && board[r + 1][c] === 0) {
-                        board[r + 1][c] = board[r][c];
-                        board[r][c] = 0;
-                    }
-                }
-            }
-        }
-    }
-
     if (checkWin(row, col, currentPlayer)) {
         gameOver = true;
         showMessage(`Spieler ${currentPlayer} gewinnt!`);
@@ -185,7 +153,7 @@ function makeMove(col) {
         currentPlayer = 3 - currentPlayer;
         showMessage(`Spieler ${currentPlayer} ist am Zug`);
     }
-    sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, moveCount }]);
+    sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver }]);
     renderBoard();
 }
 
@@ -193,7 +161,6 @@ function receiveMove(data) {
     board = data.board;
     currentPlayer = data.currentPlayer;
     gameOver = data.gameOver;
-    moveCount = data.moveCount || moveCount; // NEU
     renderBoard();
     if (gameOver) {
         if (isFull()) showMessage("Unentschieden!");
@@ -233,7 +200,6 @@ function receiveRestart(data) {
     board = data.board;
     currentPlayer = data.currentPlayer;
     gameOver = data.gameOver;
-    moveCount = 0; // NEU
     renderBoard();
     showMessage("Spieler 1 ist am Zug");
 }
