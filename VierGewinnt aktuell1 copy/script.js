@@ -1,63 +1,81 @@
 const webRoomsWebSocketServerAddr = 'wss://nosch.uber.space/web-rooms/';
-const roomName = prompt("Raumname für gemeinsames Spiel:", "mein-viergewinnt-raum") || "vier-gewinnt-demo";
+const ROOM_PREFIX = "viergewinnt-";
 const ROWS = 6;
 const COLS = 7;
+const EVENT_TYPES = [
+    "bafög", "urlaub", "haertefall", "drittversuch", "dekan", "leer"
+];
+const EVENT_COLOR = "#66ccff";
+
+let roomIndex = 1;
+let roomName = roomIndex.toString();
+let joined = false;
+let clientCount = 0;
+let myClientId = null;
+let myPlayerNumber = null;
 
 let board = [];
 let currentPlayer = 1;
 let gameOver = false;
-let myClientId = null;
-let myPlayerNumber = null;
-let clientCount = 0;
-let semesterCount = [0, 0]; // [Spieler1, Spieler2]
-let skipTurn = [false, false]; // Urlaubssemester
-let eventMessage = ""; // Für Event-Anzeige
+let semesterCount = [0, 0];
+let skipTurn = [false, false];
+let eventMessage = "";
+let eventFields = [];
 
-// Anzahl und Typen der Events/Ereignisfelder
-const EVENT_TYPES = [
-    "bafög",
-    "urlaub",
-    "haertefall",
-    "drittversuch",
-    "dekan",
-];
-const EVENT_COLOR = "#66ccff"; // hellblau
+let socket = null;
+startRoomSearch();
 
-let eventFields = []; // [{r, c, type}]
+function startRoomSearch() {
+    roomName = roomIndex.toString();
+    joined = false;
+    clientCount = 0;
+    if (socket) {
+        socket.close();
+    }
+    socket = new WebSocket(webRoomsWebSocketServerAddr);
 
-// WebSocket Setup
-const socket = new WebSocket(webRoomsWebSocketServerAddr);
+    socket.addEventListener('open', () => {
+        tryJoinRoom();
+        setInterval(() => socket.send(''), 30000);
+    });
 
-socket.addEventListener('open', () => {
+    socket.addEventListener('message', (event) => {
+        const data = event.data;
+        if (data.length > 0) {
+            const incoming = JSON.parse(data);
+            const selector = incoming[0];
+
+            switch (selector) {
+                case '*client-id*':
+                    myClientId = incoming[1];
+                    break;
+                case '*client-count*':
+                    clientCount = incoming[1];
+                    if (clientCount > 2 && !joined) {
+                        // Raum ist voll, versuche nächsten Raum mit neuer Verbindung!
+                        roomIndex++;
+                        startRoomSearch();
+                    } else if (clientCount <= 2 && !joined) {
+                        joined = true;
+                        assignPlayerNumber();
+                    }
+                    break;
+                case 'restart':
+                    receiveRestart(incoming[1]);
+                    break;
+                case 'move':
+                    receiveMove(incoming[1]);
+                    break;
+                // ...weitere Fälle...
+            }
+        }
+    });
+}
+
+function tryJoinRoom() {
     sendRequest('*enter-room*', "vier gewinnt" + roomName);
     sendRequest('*subscribe-client-count*');
-    setInterval(() => socket.send(''), 30000);
-});
-
-socket.addEventListener('message', (event) => {
-    const data = event.data;
-    if (data.length > 0) {
-        const incoming = JSON.parse(data);
-        const selector = incoming[0];
-
-        switch (selector) {
-            case '*client-id*':
-                myClientId = incoming[1];
-                assignPlayerNumber();
-                break;
-            case '*client-count*':
-                clientCount = incoming[1];
-                assignPlayerNumber();
-                break;
-            case 'move':
-                receiveMove(incoming[1]);
-                break;
-            case 'restart':
-                receiveRestart(incoming[1]);
-                break;
-        }
-    }
-});
+}
 
 function sendRequest(...message) {
     socket.send(JSON.stringify(message));
@@ -105,20 +123,16 @@ function initBoard() {
 }
 
 function assignPlayerNumber() {
-    // Spieler 1: clientId 0, Spieler 2: clientId 1
     if (myClientId === 0) {
         myPlayerNumber = 1;
-        showMessage("Du bist Spieler 1 (Rot)");
-        if (board.length === 0) {
-            initBoard();
-            sendRequest('*broadcast-message*', ['restart', { board, currentPlayer, gameOver, eventFields }]);
-        }
+        showMessage(`Du bist Spieler 1 (Rot) – Raum: ${roomName}`);
+        // Nur Spieler 1 initialisiert das Spielfeld!
+        initBoard();
+        sendRequest('*broadcast-message*', ['restart', { board, currentPlayer, gameOver, eventFields }]);
     } else if (myClientId === 1) {
         myPlayerNumber = 2;
-        showMessage("Du bist Spieler 2 (Gelb)");
-    } else {
-        myPlayerNumber = null;
-        showMessage("Nur zwei Spieler pro Raum erlaubt!");
+        showMessage(`Du bist Spieler 2 (Gelb) – Raum: ${roomName}`);
+
     }
     renderBoard();
     addRestartButton();

@@ -1,63 +1,81 @@
 const webRoomsWebSocketServerAddr = 'wss://nosch.uber.space/web-rooms/';
-const roomName = prompt("Raumname für gemeinsames Spiel:", "mein-viergewinnt-raum") || "vier-gewinnt-demo";
+const ROOM_PREFIX = "viergewinnt-";
 const ROWS = 6;
 const COLS = 7;
+const EVENT_TYPES = [
+    "bafög", "urlaub", "haertefall", "drittversuch", "dekan"
+];
+const EVENT_COLOR = "#66ccff";
+
+let roomIndex = 1;
+let roomName = roomIndex.toString();
+let joined = false;
+let clientCount = 0;
+let myClientId = null;
+let myPlayerNumber = null;
 
 let board = [];
 let currentPlayer = 1;
 let gameOver = false;
-let myClientId = null;
-let myPlayerNumber = null;
-let clientCount = 0;
-let semesterCount = [0, 0]; // [Spieler1, Spieler2]
-let skipTurn = [false, false]; // Urlaubssemester
-let eventMessage = ""; // Für Event-Anzeige
+let semesterCount = [0, 0];
+let skipTurn = [false, false];
+let eventMessage = "";
+let eventFields = [];
 
-// Anzahl und Typen der Events/Ereignisfelder
-const EVENT_TYPES = [
-    "bafög",
-    "urlaub",
-    "haertefall",
-    "drittversuch",
-    "dekan",
-];
-const EVENT_COLOR = "#66ccff"; // hellblau
+let socket = null;
+startRoomSearch();
 
-let eventFields = []; // [{r, c, type}]
+function startRoomSearch() {
+    roomName = roomIndex.toString();
+    joined = false;
+    clientCount = 0;
+    if (socket) {
+        socket.close();
+    }
+    socket = new WebSocket(webRoomsWebSocketServerAddr);
 
-// WebSocket Setup
-const socket = new WebSocket(webRoomsWebSocketServerAddr);
+    socket.addEventListener('open', () => {
+        tryJoinRoom();
+        setInterval(() => socket.send(''), 30000);
+    });
 
-socket.addEventListener('open', () => {
+    socket.addEventListener('message', (event) => {
+        const data = event.data;
+        if (data.length > 0) {
+            const incoming = JSON.parse(data);
+            const selector = incoming[0];
+
+            switch (selector) {
+                case '*client-id*':
+                    myClientId = incoming[1];
+                    break;
+                case '*client-count*':
+                    clientCount = incoming[1];
+                    if (clientCount > 2 && !joined) {
+                        // Raum ist voll, versuche nächsten Raum mit neuer Verbindung!
+                        roomIndex++;
+                        startRoomSearch();
+                    } else if (clientCount <= 2 && !joined) {
+                        joined = true;
+                        assignPlayerNumber();
+                    }
+                    break;
+                case 'restart':
+                    receiveRestart(incoming[1]);
+                    break;
+                case 'move':
+                    receiveMove(incoming[1]);
+                    break;
+                // ...weitere Fälle...
+            }
+        }
+    });
+}
+
+function tryJoinRoom() {
     sendRequest('*enter-room*', "vier gewinnt" + roomName);
     sendRequest('*subscribe-client-count*');
-    setInterval(() => socket.send(''), 30000);
-});
-
-socket.addEventListener('message', (event) => {
-    const data = event.data;
-    if (data.length > 0) {
-        const incoming = JSON.parse(data);
-        const selector = incoming[0];
-
-        switch (selector) {
-            case '*client-id*':
-                myClientId = incoming[1];
-                assignPlayerNumber();
-                break;
-            case '*client-count*':
-                clientCount = incoming[1];
-                assignPlayerNumber();
-                break;
-            case 'move':
-                receiveMove(incoming[1]);
-                break;
-            case 'restart':
-                receiveRestart(incoming[1]);
-                break;
-        }
-    }
-});
+}
 
 function sendRequest(...message) {
     socket.send(JSON.stringify(message));
@@ -105,20 +123,15 @@ function initBoard() {
 }
 
 function assignPlayerNumber() {
-    // Spieler 1: clientId 0, Spieler 2: clientId 1
     if (myClientId === 0) {
         myPlayerNumber = 1;
-        showMessage("Du bist Spieler 1 (Rot)");
-        if (board.length === 0) {
-            initBoard();
-            sendRequest('*broadcast-message*', ['restart', { board, currentPlayer, gameOver, eventFields }]);
-        }
+        showMessage(`Du bist Spieler 1 (Rot) – Raum: ${roomName}`);
+        // Nur Spieler 1 initialisiert das Spielfeld!
+        initBoard();
+        sendRequest('*broadcast-message*', ['restart', { board, currentPlayer, gameOver, eventFields }]);
     } else if (myClientId === 1) {
         myPlayerNumber = 2;
-        showMessage("Du bist Spieler 2 (Gelb)");
-    } else {
-        myPlayerNumber = null;
-        showMessage("Nur zwei Spieler pro Raum erlaubt!");
+        showMessage(`Du bist Spieler 2 (Gelb) – Raum: ${roomName}`);
     }
     renderBoard();
     addRestartButton();
@@ -231,7 +244,7 @@ function triggerRandomEvent(player) {
                 break;
             case "drittversuch":
                 // Spieler darf nochmal ziehen, aber bei Fehlschlag wird ein Stein entfernt
-                eventMessage = "⚠️ Drittversuch! Du darfst nochmal ziehen, aber bei Fehlschlag verlierst du einen Stein.";
+                eventMessage = "⚠️ Drittversuch! Du darfst nochmal ziehen, aber du hast einen Stein verloren.";
                 skipTurn[player - 1] = "drittversuch";
                 break;
             case "dekan":
@@ -269,7 +282,7 @@ function triggerEvent(event, player, row, col) {
             }
             break;
         case "drittversuch":
-            eventMessage = "⚠️ Drittversuch! Du darfst nochmal ziehen, aber bei Fehlschlag verlierst du einen Stein.";
+            eventMessage = "⚠️ Drittversuch! Du darfst nochmal ziehen, aber du hast einen Stein verloren.";
             skipTurn[player - 1] = "drittversuch";
             break;
         case "dekan":
@@ -317,6 +330,7 @@ function makeMove(col) {
     if (skipTurn[currentPlayer - 1] === "drittversuch") {
         skipTurn[currentPlayer - 1] = false;
         if (!checkWin(row, col, currentPlayer)) {
+            // Kein Gewinn: Entferne einen eigenen Stein
             let ownStones = [];
             for (let r = 0; r < ROWS; r++)
                 for (let c = 0; c < COLS; c++)
@@ -324,9 +338,14 @@ function makeMove(col) {
             if (ownStones.length > 0) {
                 let { r, c } = ownStones[Math.floor(Math.random() * ownStones.length)];
                 board[r][c] = 0;
-                eventMessage += " Dein Stein wurde entfernt!";
             }
         }
+        // *** Spielerwechsel erst nach dem zweiten Zug! ***
+        // Also: return hier, damit currentPlayer NICHT gewechselt wird
+        sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, semesterCount, skipTurn, eventMessage, eventFields }]);
+        renderBoard();
+        showGameStatus();
+        return;
     }
 
     // Regelstudienzeit: 20 Semester
@@ -337,7 +356,7 @@ function makeMove(col) {
     } else if (isFull()) {
         gameOver = true;
     } else {
-        currentPlayer = 3 - currentPlayer;
+        currentPlayer = 3 - currentPlayer; // Spielerwechsel nur hier!
     }
     sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, semesterCount, skipTurn, eventMessage, eventFields }]);
     renderBoard();
@@ -356,7 +375,13 @@ function receiveMove(data) {
     showGameStatus();
 }
 
+function getPlayerInfoText() {
+    let farbe = myPlayerNumber === 1 ? "Rot" : myPlayerNumber === 2 ? "Gelb" : "-";
+    return `Du bist Spieler ${myPlayerNumber || "-"} (${farbe}) | Raum: ${roomName}`;
+}
+
 function showGameStatus() {
+    let info = getPlayerInfoText();
     if (gameOver) {
         // Gewinner ermitteln
         let winner = null;
@@ -366,19 +391,19 @@ function showGameStatus() {
 
         if (winner) {
             if (myPlayerNumber === winner) {
-                showMessage("🎓 Bachelor erhalten! Studi-Legende!");
+                showMessage(`🎓 Bachelor erhalten! Studi-Legende!\n${info}`);
             } else if (myPlayerNumber === 1 || myPlayerNumber === 2) {
-                showMessage("Exmatrikuliert! Zu viele Prüfungsversuche.");
+                showMessage(`Exmatrikuliert! Zu viele Prüfungsversuche.\n${info}`);
             } else {
-                showMessage("Spiel beendet.");
+                showMessage(`Spiel beendet.\n${info}`);
             }
         } else if (isFull()) {
-            showMessage("Unentschieden! Ihr bleibt ewige Studis.");
+            showMessage(`Unentschieden! Ihr bleibt ewige Studis.\n${info}`);
         }
     } else {
         showMessage(
             (eventMessage ? eventMessage + "\n" : "") +
-            `Semester: ${semesterCount[0]} / ${semesterCount[1]}`
+            `Semester: ${semesterCount[0]} / ${semesterCount[1]}\n${info}`
         );
     }
 }
@@ -400,24 +425,38 @@ function addRestartButton() {
     if (!btn) {
         btn = document.createElement("button");
         btn.id = "restartBtn";
-        btn.innerText = "Neustart";
+        btn.innerText = "🔄 Neustart";
         btn.style.position = "absolute";
-        btn.style.top = "60px";
+        btn.style.top = "30px";
         btn.style.left = "50%";
         btn.style.transform = "translateX(-50%)";
-        btn.style.fontSize = "1.1em";
-        btn.style.padding = "8px 18px";
-        btn.style.borderRadius = "8px";
-        btn.style.zIndex = "10";
+        btn.style.fontSize = "1.2em";
+        btn.style.padding = "12px 32px";
+        btn.style.borderRadius = "24px";
+        btn.style.border = "none";
+        btn.style.background = "linear-gradient(90deg,rgb(255, 0, 0) 0%,rgb(255, 255, 0) 100%)";
+        btn.style.color = "#fff";
+        btn.style.fontWeight = "bold";
+        btn.style.boxShadow = "0 4px 16px rgba(0,0,0,0.18)";
+        btn.style.cursor = "pointer";
+        btn.style.transition = "background 0.2s, transform 0.2s";
+        btn.onmouseenter = () => {
+            btn.style.background = "linear-gradient(90deg, rgb(255, 255, 0) 0%, rgb(255, 0, 0) 100%)";
+            btn.style.transform = "translateX(-50%) scale(1.07)";
+        };
+        btn.onmouseleave = () => {
+            btn.style.background = "linear-gradient(90deg, rgb(255, 0, 0) 0%, rgb(255, 255, 0) 100%)";
+            btn.style.transform = "translateX(-50%) scale(1)";
+        };
         btn.onclick = function () {
             if (myPlayerNumber === 1) {
                 initBoard();
-                semesterCount = [0, 0]; // <--- Semesterzähler auch lokal zurücksetzen!
+                semesterCount = [0, 0];
                 skipTurn = [false, false];
                 eventMessage = "";
                 sendRequest('*broadcast-message*', ['restart', { board, currentPlayer, gameOver, eventFields }]);
                 renderBoard();
-                showMessage("Spieler 1 ist am Zug");
+                showGameStatus();
             }
         };
         document.body.appendChild(btn);
@@ -460,23 +499,28 @@ function checkWin(row, col, player) {
 }
 
 function showMessage(msg) {
-    let msgBox = document.getElementById("msg");
-    if (!msgBox) {
-        msgBox = document.createElement("div");
-        msgBox.id = "msg";
-        msgBox.style.position = "absolute";
-        msgBox.style.top = "10px";
-        msgBox.style.left = "50%";
-        msgBox.style.transform = "translateX(-50%)";
-        msgBox.style.background = "#222";
-        msgBox.style.color = "#fff";
-        msgBox.style.padding = "10px 20px";
-        msgBox.style.borderRadius = "8px";
-        msgBox.style.fontSize = "1.2em";
-        msgBox.style.zIndex = "10";
-        document.body.appendChild(msgBox);
-    }
-    msgBox.innerText = msg;
+    // Entferne alten Nachrichtentext, falls vorhanden
+    let oldMsg = document.getElementById("aframe-message");
+    if (oldMsg) oldMsg.parentNode.removeChild(oldMsg);
+
+    // Erstelle neuen 3D-Text
+    let textEntity = document.createElement("a-entity");
+    textEntity.setAttribute("id", "aframe-message");
+    textEntity.setAttribute("text", {
+        value: msg,
+        align: "center",
+        width: 10,
+        color: "#FFFFFF",
+        wrapCount: 40,
+        baseline: "top",
+        lineHeight: 60
+    });
+    // Positioniere den Text über dem Spielfeld
+    textEntity.setAttribute("position", `${COLS / 2 - 0.5} ${ROWS + 3} -6`);
+    textEntity.setAttribute("scale", "1 1 1");
+    // Füge den Text zur Szene hinzu
+    let scene = document.querySelector("a-scene");
+    scene.appendChild(textEntity);
 }
 
 document.addEventListener("DOMContentLoaded", function () {
