@@ -574,18 +574,21 @@ function showMessage(msg) {
     let oldMsg = document.getElementById("aframe-message");
     if (oldMsg) oldMsg.parentNode.removeChild(oldMsg);
 
-    // Erstelle neuen 3D-Text als <a-text>
-    let textEntity = document.createElement("a-text");
+    // Erstelle neuen 3D-Text
+    let textEntity = document.createElement("a-entity");
     textEntity.setAttribute("id", "aframe-message");
-    textEntity.setAttribute("value", msg);
-    textEntity.setAttribute("font", "fonts/custom-msdf.json"); // Passe ggf. den Namen an
-    textEntity.setAttribute("font-image", "fonts/custom.png"); // Passe ggf. den Namen an
-    textEntity.setAttribute("color", "#FFFFFF");
-    textEntity.setAttribute("width", "10");
-    textEntity.setAttribute("align", "center");
+    textEntity.setAttribute("text", {
+        value: msg,
+        align: "center",
+        width: 10,
+        color: "#FFFFFF",
+        wrapCount: 40,
+        baseline: "top",
+        lineHeight: 60,
+    });
+    // Positioniere den Text über dem Spielfeld
     textEntity.setAttribute("position", `${COLS / 2 - 0.5} ${ROWS + 3} -6`);
     textEntity.setAttribute("scale", "1 1 1");
-
     // Füge den Text zur Szene hinzu
     let scene = document.querySelector("a-scene");
     scene.appendChild(textEntity);
