@@ -1,5 +1,5 @@
 const webRoomsWebSocketServerAddr = 'wss://nosch.uber.space/web-rooms/';
-const ROOM_PREFIX = "vier gewinnt" + Math.floor(Math.random() * 10000) + "-"; // Zufälliger Raumname
+const ROOM_PREFIX = "vier gewinnt" + Math.floor(Math.random() * 10000) + "-";
 const ROWS = 6;
 const COLS = 7;
 const EVENT_TYPES = [
@@ -7,6 +7,7 @@ const EVENT_TYPES = [
 ];
 const EVENT_COLOR = "#66ccff";
 
+// Globale Variablen für Spielstatus und Netzwerk
 let roomIndex = 1;
 let roomName = roomIndex.toString();
 let joined = false;
@@ -14,18 +15,20 @@ let clientCount = 0;
 let myClientId = null;
 let myPlayerNumber = null;
 
-let board = [];
-let currentPlayer = 1;
+let board = []; // 2D-Array für das Spielfeld
+let currentPlayer = 1; // 1 = Rot, 2 = Gelb
 let gameOver = false;
-let semesterCount = [0, 0];
-let skipTurn = [false, false];
-let eventMessage = "";
-let eventFields = [];
+let semesterCount = [0, 0]; // Zähler für die Züge/Semester pro Spieler
+let skipTurn = [false, false]; // Speichert, ob ein Spieler aussetzen muss
+let eventMessage = ""; // Aktuelle Eventnachricht
+let eventFields = []; // Positionen und Typen der Ereignisfelder
 
 let socket = null;
-let selectedCol = null; // Am Anfang der Datei
-startRoomSearch();
+let selectedCol = null; // Aktuell ausgewählte Spalte für den nächsten Zug
 
+startRoomSearch(); // Starte die Suche nach einem freien Raum (Multiplayer)
+
+// Verbindungsaufbau und Raumverwaltung
 function startRoomSearch() {
     roomName = roomIndex.toString();
     joined = false;
@@ -37,7 +40,7 @@ function startRoomSearch() {
 
     socket.addEventListener('open', () => {
         tryJoinRoom();
-        setInterval(() => socket.send(''), 30000);
+        setInterval(() => socket.send(''), 30000); // Halteverbindung
     });
 
     socket.addEventListener('message', (event) => {
@@ -53,7 +56,7 @@ function startRoomSearch() {
                 case '*client-count*':
                     clientCount = incoming[1];
                     if (clientCount > 2 && !joined) {
-                        // Raum ist voll, versuche nächsten Raum mit neuer Verbindung!
+                        // Wenn Raum voll, nächsten Raum probieren
                         roomIndex++;
                         startRoomSearch();
                     } else if (clientCount <= 2 && !joined) {
@@ -67,22 +70,23 @@ function startRoomSearch() {
                 case 'move':
                     receiveMove(incoming[1]);
                     break;
-                // ...weitere Fälle...
             }
         }
     });
 }
 
+// Versuche, dem Raum beizutreten
 function tryJoinRoom() {
     sendRequest('*enter-room*', "vier gewinnt" + roomName);
     sendRequest('*subscribe-client-count*');
 }
 
+// Sende eine Nachricht an den Server
 function sendRequest(...message) {
     socket.send(JSON.stringify(message));
 }
 
-// Spiellogik
+// Initialisiere das Spielfeld und verteile Ereignisfelder
 function initBoard() {
     board = [];
     for (let r = 0; r < ROWS; r++) {
@@ -100,20 +104,17 @@ function initBoard() {
     for (let r = 0; r < ROWS; r++)
         for (let c = 0; c < COLS; c++)
             allFields.push({ r, c });
-    // Mische alle Felder
+    // Felder mischen und Events zuweisen
     for (let i = allFields.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [allFields[i], allFields[j]] = [allFields[j], allFields[i]];
     }
-    // Wähle z.B. 6 Felder aus
     let chosenFields = allFields.slice(0, EVENT_TYPES.length);
-    // Mische die Events
     let shuffledEvents = EVENT_TYPES.slice();
     for (let i = shuffledEvents.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffledEvents[i], shuffledEvents[j]] = [shuffledEvents[j], shuffledEvents[i]];
     }
-    // Weise jedem Feld ein Event zu
     for (let i = 0; i < chosenFields.length; i++) {
         eventFields.push({
             r: chosenFields[i].r,
@@ -123,11 +124,11 @@ function initBoard() {
     }
 }
 
+// Weise Spielernummer zu und initialisiere ggf. das Spielfeld
 function assignPlayerNumber() {
     if (myClientId === 0) {
         myPlayerNumber = 1;
         showMessage(`Du bist Spieler 1 (Rot) – Raum: ${roomName}`);
-        // Nur Spieler 1 initialisiert das Spielfeld!
         initBoard();
         sendRequest('*broadcast-message*', ['restart', { board, currentPlayer, gameOver, eventFields }]);
     } else if (myClientId === 1) {
@@ -138,22 +139,20 @@ function assignPlayerNumber() {
     addRestartButton();
 }
 
+// Zeichnet das Spielfeld und alle Elemente neu
 function renderBoard() {
     const content = document.getElementById("content");
     content.innerHTML = "";
 
-    // --- Infotext links neben dem Board ---
-    // Entferne alten Info-Text, falls vorhanden
+    // Entferne alten Info-Text und Hintergrund
     let oldInfo = document.getElementById("info-text");
     if (oldInfo) oldInfo.parentNode.removeChild(oldInfo);
-
     let oldInfoBg = document.getElementById("info-text-bg");
     if (oldInfoBg) oldInfoBg.parentNode.removeChild(oldInfoBg);
 
-    // Nur am Anfang der Runde anzeigen (z.B. wenn noch kein Stein gesetzt wurde)
+    // Zeige Info-Text nur am Anfang der Runde
     let firstMove = board.flat().every(cell => cell === 0);
     if (firstMove) {
-        // Hintergrund-Plane für Info-Text
         let infoBg = document.createElement("a-plane");
         infoBg.setAttribute("id", "info-text-bg");
         infoBg.setAttribute("width", "8.5");
@@ -164,19 +163,18 @@ function renderBoard() {
         let scene = document.querySelector("a-scene");
         scene.appendChild(infoBg);
 
-        // Info-Text
         let infoText = document.createElement("a-text");
         infoText.setAttribute("id", "info-text");
         infoText.setAttribute("value",
-            "Willkommen bei\n" + 
+            "Willkommen bei\n" +
             "Regelstudienzeit gewinnt!\n\n" +
             "Jeder Zug ist ein Semester.\n\n" +
             "Brauchst du mehr als 20 Semester,\n" +
             "hast du verloren!\n\n" +
-            "Wer zuerst 4 in einer Reihe hat,\n" + 
+            "Wer zuerst 4 in einer Reihe hat,\n" +
             "bekommt den Bachelor!\n\n" +
             "Ereignisfelder (hellblau):\n" +
-            "loesen verschiedene\n" + 
+            "loesen verschiedene\n" +
             "Studienereignisse aus"
         );
         infoText.setAttribute("color", "#011126");
@@ -187,7 +185,7 @@ function renderBoard() {
         scene.appendChild(infoText);
     }
 
-    // Brett-Hintergrund
+    // Erzeuge das Brett als unsichtbare Box für die Platzierung
     let boardBg = document.createElement("a-box");
     boardBg.setAttribute("position", `${(COLS-1)/2} ${ROWS/2-0.5} -6.2`);
     boardBg.setAttribute("depth", "0.2");
@@ -197,7 +195,7 @@ function renderBoard() {
     boardBg.setAttribute("opacity", "0");
     content.appendChild(boardBg);
 
-    // Scheiben und Ereignisfelder
+    // Erzeuge alle Chips und Ereignisfelder
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
             let chip = document.createElement("a-cylinder");
@@ -207,7 +205,7 @@ function renderBoard() {
             chip.setAttribute("position", `${c} ${ROWS-1-r} -6`);
             chip.setAttribute("rotation", "90 0 0");
 
-            // Prüfe, ob Ereignisfeld
+            // Ereignisfeld anzeigen, falls vorhanden und Feld leer
             let eventField = eventFields.find(f => f.r === r && f.c === c);
             if (eventField && board[r][c] === 0) {
                 chip.setAttribute("color", EVENT_COLOR);
@@ -228,7 +226,7 @@ function renderBoard() {
     let oldHoverChip = document.getElementById("hover-chip");
     if (oldHoverChip) oldHoverChip.parentNode.removeChild(oldHoverChip);
 
-    // Nur anzeigen, wenn Spieler am Zug ist und das Spiel läuft
+    // Zeige Hover-Chip, wenn Spieler am Zug ist
     if (!gameOver && myPlayerNumber === currentPlayer && myPlayerNumber !== null) {
         let hoverChip = document.createElement("a-cylinder");
         hoverChip.setAttribute("id", "hover-chip");
@@ -238,18 +236,18 @@ function renderBoard() {
         hoverChip.setAttribute("rotation", "90 0 0");
         hoverChip.setAttribute("color", myPlayerNumber === 1 ? "#FF0000" : "#FFFF00");
         hoverChip.setAttribute("opacity", "0.85");
-        // Standard-Position: Mitte
         hoverChip.setAttribute("position", `${Math.floor(COLS/2)} ${ROWS + 0.3} -6`);
         let scene = document.querySelector("a-scene");
         scene.appendChild(hoverChip);
+    }
 
-    } 
-    // Entferne alte Fangflächen
+    // Entferne alte Fangflächen für Klicks
     for (let c = 0; c < COLS; c++) {
         let old = document.getElementById("col-hover-" + c);
         if (old) old.parentNode.removeChild(old);
     }
 
+    // Erzeuge Fangflächen für Klicks auf Spalten
     if (!gameOver && myPlayerNumber === currentPlayer && myPlayerNumber !== null) {
         for (let c = 0; c < COLS; c++) {
             let colPlane = document.createElement("a-plane");
@@ -281,7 +279,7 @@ function renderBoard() {
         }
     }
 
-    // window.onmouseup nur einmal global setzen!
+    // Setze MouseUp-Handler nur einmal
     if (!window._hasMouseUpHandler) {
         window.onmouseup = function (e) {
             if ((!e.button || e.button === 0) && selectedCol !== null) {
@@ -293,6 +291,7 @@ function renderBoard() {
     }
 }
 
+// Hilfsfunktion: Finde die unterste freie Zeile in einer Spalte
 function getLowestEmptyRow(col) {
     for (let r = ROWS - 1; r >= 0; r--) {
         if (board[r][col] === 0) return r;
@@ -300,58 +299,7 @@ function getLowestEmptyRow(col) {
     return -1;
 }
 
-// Hilfsfunktion für Events
-function triggerRandomEvent(player) {
-    // 30% Chance auf ein Event
-    if (Math.random() < 0.3) {
-        const events = [
-            "bafoeg",
-            "urlaub",
-            "haertefall",
-            "drittversuch",
-            "dekan"
-        ];
-        const event = events[Math.floor(Math.random() * events.length)];
-        switch (event) {
-            case "bafoeg":
-                // Unterste Reihe löschen
-                for (let c = 0; c < COLS; c++) board[ROWS - 1][c] = 0;
-                eventMessage = "Bafoeg gestrichen! Unterste Reihe verloren.";
-                break;
-            case "urlaub":
-                skipTurn[player - 1] = true;
-                eventMessage = "Urlaubssemester! Du musst eine Runde aussetzen.";
-                break;
-            case "haertefall":
-                // Härtefall: eigenen Stein verschieben
-                let ownStones = [];
-                for (let r = 0; r < ROWS; r++)
-                    for (let c = 0; c < COLS; c++)
-                        if (board[r][c] === player) ownStones.push({ r, c });
-                if (ownStones.length > 0) {
-                    let { r, c } = ownStones[Math.floor(Math.random() * ownStones.length)];
-                    board[r][c] = 0;
-                    let newCol = (c + 1) % COLS;
-                    let newRow = getLowestEmptyRow(newCol);
-                    if (newRow !== -1) board[newRow][newCol] = player;
-                    eventMessage = "Haertefallantrag! Ein Stein wurde verschoben.";
-                }
-                break;
-            case "drittversuch":
-                // Spieler darf nochmal ziehen, aber bei Fehlschlag wird ein Stein entfernt
-                eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein wurde entfernt.";
-                skipTurn[player - 1] = "drittversuch";
-                break;
-            case "dekan":
-                let tippCol = Math.floor(Math.random() * COLS) + 1;
-                eventMessage = `Studiendekan-Tipp: "Setze in Spalte ${tippCol}"`;
-                break;
-        }
-    } else {
-        eventMessage = "";
-    }
-}
-
+// Event-Logik: Löst das entsprechende Ereignis aus
 function triggerEvent(event, player, row, col) {
     switch (event) {
         case "bafoeg":
@@ -389,6 +337,7 @@ function triggerEvent(event, player, row, col) {
     }
 }
 
+// Spiellogik für das Setzen eines Steins
 function makeMove(col) {
     if (gameOver || myPlayerNumber !== currentPlayer) return;
     if (skipTurn[currentPlayer - 1] === true) {
@@ -402,20 +351,22 @@ function makeMove(col) {
     let row = getLowestEmptyRow(col);
     if (row === -1) return;
     board[row][col] = currentPlayer;
-    semesterCount[currentPlayer - 1]++; // Semesterzähler erhöhen
+    semesterCount[currentPlayer - 1]++; // Erhöhe Semesterzähler
 
-let chipSound = document.querySelector('#chip-sound');
-if (chipSound && chipSound.components.sound) {
-    chipSound.components.sound.playSound();
-}
-    // Prüfe, ob Ereignisfeld getroffen wurde
+    // Spiele Sound beim Setzen eines Chips
+    let chipSound = document.querySelector('#chip-sound');
+    if (chipSound && chipSound.components.sound) {
+        chipSound.components.sound.playSound();
+    }
+
+    // Prüfe, ob ein Ereignisfeld getroffen wurde
     let triggeredEvent = null;
     for (let i = 0; i < eventFields.length; i++) {
         let ef = eventFields[i];
         if (ef.r === row && ef.c === col && ef.type !== "leer") {
             triggeredEvent = ef.type;
             eventFields.splice(i, 1);
-            break; // Schleife verlassen!
+            break;
         }
     }
     if (triggeredEvent) {
@@ -425,21 +376,19 @@ if (chipSound && chipSound.components.sound) {
             eventSound.components.sound.playSound();
         }
         if (triggeredEvent === "drittversuch") {
-            // Entferne den zuletzt gesetzten Stein
-            // Entferne den allerersten eigenen Stein (am weitesten unten)
-let removed = false;
-for (let r = ROWS - 1; r >= 0; r--) {
-    for (let c2 = 0; c2 < COLS; c2++) {
-        if (board[r][c2] === currentPlayer) {
-            board[r][c2] = 0;
-            removed = true;
-            break;
-        }
-    }
-    if (removed) break;
-}
-eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein wurde entfernt.";
-            // NICHT Spieler wechseln, sondern return: Spieler darf nochmal!
+            // Drittversuch: Entferne einen eigenen Stein
+            let removed = false;
+            for (let r = ROWS - 1; r >= 0; r--) {
+                for (let c2 = 0; c2 < COLS; c2++) {
+                    if (board[r][c2] === currentPlayer) {
+                        board[r][c2] = 0;
+                        removed = true;
+                        break;
+                    }
+                }
+                if (removed) break;
+            }
+            eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein wurde entfernt.";
             sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, semesterCount, skipTurn, eventMessage, eventFields }]);
             renderBoard();
             showGameStatus();
@@ -451,11 +400,10 @@ eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein w
         eventMessage = "";
     }
 
-    // Drittversuch-Logik
+    // Drittversuch-Logik: Spieler darf nochmal ziehen
     if (skipTurn[currentPlayer - 1] === "drittversuch") {
         skipTurn[currentPlayer - 1] = false;
         if (!checkWin(row, col, currentPlayer)) {
-            // Kein Gewinn: Entferne einen eigenen Stein
             let ownStones = [];
             for (let r = 0; r < ROWS; r++)
                 for (let c = 0; c < COLS; c++)
@@ -465,15 +413,13 @@ eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein w
                 board[r][c] = 0;
             }
         }
-        // *** Spielerwechsel erst nach dem zweiten Zug! ***
-        // Also: return hier, damit currentPlayer NICHT gewechselt wird
         sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, semesterCount, skipTurn, eventMessage, eventFields }]);
         renderBoard();
         showGameStatus();
         return;
     }
 
-    // Regelstudienzeit: 20 Semester
+    // Prüfe auf Sieg, Unentschieden oder Regelstudienzeit
     if (semesterCount[currentPlayer - 1] >= 20) {
         gameOver = true;
     } else if (checkWin(row, col, currentPlayer)) {
@@ -481,13 +427,14 @@ eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein w
     } else if (isFull()) {
         gameOver = true;
     } else {
-        currentPlayer = 3 - currentPlayer; // Spielerwechsel nur hier!
+        currentPlayer = 3 - currentPlayer; // Spielerwechsel
     }
     sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, semesterCount, skipTurn, eventMessage, eventFields }]);
     renderBoard();
     showGameStatus();
 }
 
+// Empfange einen Spielzug vom Server
 function receiveMove(data) {
     board = data.board;
     currentPlayer = data.currentPlayer;
@@ -500,15 +447,16 @@ function receiveMove(data) {
     showGameStatus();
 }
 
+// Zeigt die aktuelle Spielerinfo an
 function getPlayerInfoText() {
     let farbe = myPlayerNumber === 1 ? "Rot" : myPlayerNumber === 2 ? "Gelb" : "-";
     return `Du bist Spieler ${myPlayerNumber || "-"} (${farbe}) | Raum: ${roomName}`;
 }
 
+// Zeigt den aktuellen Spielstatus und Event-Text an
 function showGameStatus() {
     let info = getPlayerInfoText();
     if (gameOver) {
-        // Gewinner ermitteln
         let winner = null;
         if (semesterCount[0] >= 20) winner = 1;
         if (semesterCount[1] >= 20) winner = 2;
@@ -531,38 +479,37 @@ function showGameStatus() {
         );
     }
 
-    // Event-Text separat anzeigen (rechts neben dem Board)
-    // Vorher alten Event-Text entfernen
+    // Entferne alten Event-Text und Hintergrund
     let oldEventText = document.getElementById("event-message");
     if (oldEventText) oldEventText.parentNode.removeChild(oldEventText);
-let oldEventBg = document.getElementById("event-message-bg");
-if (oldEventBg) oldEventBg.parentNode.removeChild(oldEventBg);
+    let oldEventBg = document.getElementById("event-message-bg");
+    if (oldEventBg) oldEventBg.parentNode.removeChild(oldEventBg);
 
-if (eventMessage && !gameOver) {
-    // Hintergrund-Plane für Event-Text
-    let eventBg = document.createElement("a-plane");
-    eventBg.setAttribute("id", "event-message-bg");
-    eventBg.setAttribute("width", "12");
-    eventBg.setAttribute("height", "1.2");
-    eventBg.setAttribute("color", "#111");
-    eventBg.setAttribute("opacity", "0.7");
-    eventBg.setAttribute("position", `13 4 -6.01`);
-    let scene = document.querySelector("a-scene");
-    scene.appendChild(eventBg);
+    // Zeige Event-Text rechts neben dem Board
+    if (eventMessage && !gameOver) {
+        let eventBg = document.createElement("a-plane");
+        eventBg.setAttribute("id", "event-message-bg");
+        eventBg.setAttribute("width", "12");
+        eventBg.setAttribute("height", "1.2");
+        eventBg.setAttribute("color", "#111");
+        eventBg.setAttribute("opacity", "0.7");
+        eventBg.setAttribute("position", `13 4 -6.01`);
+        let scene = document.querySelector("a-scene");
+        scene.appendChild(eventBg);
 
-    let eventText = document.createElement("a-text");
-    eventText.setAttribute("id", "event-message");
-    eventText.setAttribute("value", eventMessage);
-    eventText.setAttribute("color", "#66ccff");
-    eventText.setAttribute("width", "6");
-    eventText.setAttribute("align", "center");
-    eventText.setAttribute("position", `13 4 -6`);
-    eventText.setAttribute("scale", "2 2 2");
-    scene.appendChild(eventText);
+        let eventText = document.createElement("a-text");
+        eventText.setAttribute("id", "event-message");
+        eventText.setAttribute("value", eventMessage);
+        eventText.setAttribute("color", "#66ccff");
+        eventText.setAttribute("width", "6");
+        eventText.setAttribute("align", "center");
+        eventText.setAttribute("position", `13 4 -6`);
+        eventText.setAttribute("scale", "2 2 2");
+        scene.appendChild(eventText);
+    }
 }
-}
 
-// Hilfsfunktion: Gibt true zurück, wenn einer gewonnen hat
+// Prüft, ob einer der Spieler gewonnen hat
 function checkAnyWin() {
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
@@ -574,6 +521,7 @@ function checkAnyWin() {
     return false;
 }
 
+// Fügt einen Neustart-Button hinzu
 function addRestartButton() {
     let btn = document.getElementById("restartBtn");
     if (!btn) {
@@ -618,32 +566,34 @@ function addRestartButton() {
     }
 }
 
+// Empfange Neustart vom Server
 function receiveRestart(data) {
-    // Sound für neue Runde abspielen
     let startSound = document.querySelector('#start-sound');
     if (startSound && startSound.components.sound) {
         startSound.components.sound.stopSound();
-        startSound.setAttribute('sound', 'volume', 4); // Lautstärke explizit setzen
+        startSound.setAttribute('sound', 'volume', 4);
         startSound.components.sound.playSound();
     }
 
     board = data.board;
     currentPlayer = data.currentPlayer;
     gameOver = data.gameOver;
-    semesterCount = [0, 0]; // Semesterzähler zurücksetzen
+    semesterCount = [0, 0];
     skipTurn = [false, false];
     eventMessage = "";
-    eventFields = data.eventFields || eventFields; // Ereignisfelder synchronisieren
+    eventFields = data.eventFields || eventFields;
     renderBoard();
     showMessage("Neues Studium! Viel Erfolg!");
 }
 
+// Prüft, ob das Spielfeld voll ist
 function isFull() {
     for (let c = 0; c < COLS; c++)
         if (board[0][c] === 0) return false;
     return true;
 }
 
+// Prüft, ob ein Spieler ab gegebener Position gewonnen hat
 function checkWin(row, col, player) {
     function countDir(dr, dc) {
         let count = 0;
@@ -654,21 +604,20 @@ function checkWin(row, col, player) {
         return count;
     }
     return (
-        1 + countDir(0, 1) + countDir(0, -1) >= 4 ||
-        1 + countDir(1, 0) + countDir(-1, 0) >= 4 ||
-        1 + countDir(1, 1) + countDir(-1, -1) >= 4 ||
-        1 + countDir(1, -1) + countDir(-1, 1) >= 4
+        countDir(0, 1) + countDir(0, -1) >= 3 ||
+        countDir(1, 0) + countDir(-1, 0) >= 3 ||
+        countDir(1, 1) + countDir(-1, -1) >= 3 ||
+        countDir(1, -1) + countDir(-1, 1) >= 3
     );
 }
 
+// Zeigt eine Nachricht als 3D-Text mit Hintergrund an
 function showMessage(msg) {
-    // Entferne alten Nachrichtentext, falls vorhanden
     let oldMsg = document.getElementById("aframe-message");
     if (oldMsg) oldMsg.parentNode.removeChild(oldMsg);
     let oldBg = document.getElementById("aframe-message-bg");
     if (oldBg) oldBg.parentNode.removeChild(oldBg);
 
-    // Hintergrund-Plane
     let bg = document.createElement("a-plane");
     bg.setAttribute("id", "aframe-message-bg");
     bg.setAttribute("width", "8");
@@ -679,7 +628,6 @@ function showMessage(msg) {
     let scene = document.querySelector("a-scene");
     scene.appendChild(bg);
 
-    // Erstelle neuen 3D-Text als <a-text>
     let textEntity = document.createElement("a-text");
     textEntity.setAttribute("id", "aframe-message");
     textEntity.setAttribute("value", msg);
@@ -691,6 +639,7 @@ function showMessage(msg) {
     scene.appendChild(textEntity);
 }
 
+// Initialisiere Board und Button beim Laden der Seite
 document.addEventListener("DOMContentLoaded", function () {
     renderBoard();
     addRestartButton();
