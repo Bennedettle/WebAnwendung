@@ -1,5 +1,5 @@
 const webRoomsWebSocketServerAddr = 'wss://nosch.uber.space/web-rooms/';
-const ROOM_PREFIX = "viergewinnt-";
+const ROOM_PREFIX = "vier gewinnt" + Math.floor(Math.random() * 10000) + "-"; // Zufälliger Raumname
 const ROWS = 6;
 const COLS = 7;
 const EVENT_TYPES = [
@@ -141,6 +141,35 @@ function assignPlayerNumber() {
 function renderBoard() {
     const content = document.getElementById("content");
     content.innerHTML = "";
+
+    // --- Infotext links neben dem Board ---
+    // Entferne alten Info-Text, falls vorhanden
+    let oldInfo = document.getElementById("info-text");
+    if (oldInfo) oldInfo.parentNode.removeChild(oldInfo);
+
+    // Nur am Anfang der Runde anzeigen (z.B. wenn noch kein Stein gesetzt wurde)
+    let firstMove = board.flat().every(cell => cell === 0);
+    if (firstMove) {
+        let infoText = document.createElement("a-text");
+        infoText.setAttribute("id", "info-text");
+        infoText.setAttribute("value",
+            "Vier Gewinnt\n" +
+            "Setze abwechselnd Steine.\n" +
+            "Wer zuerst 4 in einer Reihe hat, gewinnt!\n\n" +
+            "Ereignisfelder (blau):\n" +
+            eventFields.map(f => `(${f.r + 1},${f.c + 1}): ${f.type}`).join("\n")
+        );
+        infoText.setAttribute("color", "#fff");
+        infoText.setAttribute("align", "left");
+        infoText.setAttribute("width", "6");
+        infoText.setAttribute("position", `-2 ${ROWS / 2} -6`);
+        infoText.setAttribute("font", "fonts/custom-msdf.json");
+        infoText.setAttribute("font-image", "fonts/custom.png");
+        infoText.setAttribute("scale", "1 1 1");
+
+        let scene = document.querySelector("a-scene");
+        scene.appendChild(infoText);
+    }
 
     // Brett-Hintergrund
     let boardBg = document.createElement("a-box");
@@ -317,7 +346,7 @@ function triggerEvent(event, player, row, col) {
             skipTurn[player - 1] = true;
             eventMessage = "Urlaubssemester! Du musst eine Runde aussetzen.";
             break;
-        case "haertefall":
+        case "härtefall":
             let ownStones = [];
             for (let r = 0; r < ROWS; r++)
                 for (let c = 0; c < COLS; c++)
@@ -359,6 +388,10 @@ function makeMove(col) {
     board[row][col] = currentPlayer;
     semesterCount[currentPlayer - 1]++; // Semesterzähler erhöhen
 
+let chipSound = document.querySelector('#chip-sound');
+if (chipSound && chipSound.components.sound) {
+    chipSound.components.sound.playSound();
+}
     // Prüfe, ob Ereignisfeld getroffen wurde
     let triggeredEvent = null;
     for (let i = 0; i < eventFields.length; i++) {
@@ -371,6 +404,11 @@ function makeMove(col) {
         }
     }
     if (triggeredEvent) {
+        let eventSound = document.querySelector('#event-sound');
+        if (eventSound && eventSound.components.sound) {
+            eventSound.components.sound.stopSound();
+            eventSound.components.sound.playSound();
+        }
         if (triggeredEvent === "drittversuch") {
             // Entferne den zuletzt gesetzten Stein
             // Entferne den allerersten eigenen Stein (am weitesten unten)
@@ -536,6 +574,14 @@ function addRestartButton() {
 }
 
 function receiveRestart(data) {
+    // Sound für neue Runde abspielen
+    let startSound = document.querySelector('#start-sound');
+    if (startSound && startSound.components.sound) {
+        startSound.components.sound.stopSound();
+        startSound.setAttribute('sound', 'volume', 4); // Lautstärke explizit setzen
+        startSound.components.sound.playSound();
+    }
+
     board = data.board;
     currentPlayer = data.currentPlayer;
     gameOver = data.gameOver;
