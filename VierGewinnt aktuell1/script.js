@@ -3,7 +3,7 @@ const ROOM_PREFIX = "vier gewinnt" + Math.floor(Math.random() * 10000) + "-"; //
 const ROWS = 6;
 const COLS = 7;
 const EVENT_TYPES = [
-    "bafög", "urlaub", "haertefall", "drittversuch", "dekan"
+    "bafoeg", "urlaub", "haertefall", "drittversuch", "dekan"
 ];
 const EVENT_COLOR = "#66ccff";
 
@@ -147,27 +147,43 @@ function renderBoard() {
     let oldInfo = document.getElementById("info-text");
     if (oldInfo) oldInfo.parentNode.removeChild(oldInfo);
 
+    let oldInfoBg = document.getElementById("info-text-bg");
+    if (oldInfoBg) oldInfoBg.parentNode.removeChild(oldInfoBg);
+
     // Nur am Anfang der Runde anzeigen (z.B. wenn noch kein Stein gesetzt wurde)
     let firstMove = board.flat().every(cell => cell === 0);
     if (firstMove) {
+        // Hintergrund-Plane für Info-Text
+        let infoBg = document.createElement("a-plane");
+        infoBg.setAttribute("id", "info-text-bg");
+        infoBg.setAttribute("width", "8.5");
+        infoBg.setAttribute("height", "8");
+        infoBg.setAttribute("color", "#20D91A");
+        infoBg.setAttribute("opacity", "0.8");
+        infoBg.setAttribute("position", `-5 ${ROWS / 2.3} -6.01`);
+        let scene = document.querySelector("a-scene");
+        scene.appendChild(infoBg);
+
+        // Info-Text
         let infoText = document.createElement("a-text");
         infoText.setAttribute("id", "info-text");
         infoText.setAttribute("value",
-            "Vier Gewinnt\n" +
-            "Setze abwechselnd Steine.\n" +
-            "Wer zuerst 4 in einer Reihe hat, gewinnt!\n\n" +
-            "Ereignisfelder (blau):\n" +
-            eventFields.map(f => `(${f.r + 1},${f.c + 1}): ${f.type}`).join("\n")
+            "Willkommen bei\n" + 
+            "Regelstudienzeit gewinnt!\n\n" +
+            "Jeder Zug ist ein Semester.\n\n" +
+            "Brauchst du mehr als 20 Semester,\n" +
+            "hast du verloren!\n\n" +
+            "Wer zuerst 4 in einer Reihe hat,\n" + 
+            "bekommt den Bachelor!\n\n" +
+            "Ereignisfelder (hellblau):\n" +
+            "loesen verschiedene\n" + 
+            "Studienereignisse aus"
         );
-        infoText.setAttribute("color", "#fff");
-        infoText.setAttribute("align", "left");
+        infoText.setAttribute("color", "#011126");
+        infoText.setAttribute("align", "center");
         infoText.setAttribute("width", "6");
-        infoText.setAttribute("position", `-2 ${ROWS / 2} -6`);
-        infoText.setAttribute("font", "fonts/custom-msdf.json");
-        infoText.setAttribute("font-image", "fonts/custom.png");
-        infoText.setAttribute("scale", "1 1 1");
-
-        let scene = document.querySelector("a-scene");
+        infoText.setAttribute("position", `-5 ${ROWS / 2.3} -6`);
+        infoText.setAttribute("scale", "2 2 2");
         scene.appendChild(infoText);
     }
 
@@ -289,7 +305,7 @@ function triggerRandomEvent(player) {
     // 30% Chance auf ein Event
     if (Math.random() < 0.3) {
         const events = [
-            "bafög",
+            "bafoeg",
             "urlaub",
             "haertefall",
             "drittversuch",
@@ -297,10 +313,10 @@ function triggerRandomEvent(player) {
         ];
         const event = events[Math.floor(Math.random() * events.length)];
         switch (event) {
-            case "bafög":
+            case "bafoeg":
                 // Unterste Reihe löschen
                 for (let c = 0; c < COLS; c++) board[ROWS - 1][c] = 0;
-                eventMessage = "Bafög gestrichen! Unterste Reihe verloren.";
+                eventMessage = "Bafoeg gestrichen! Unterste Reihe verloren.";
                 break;
             case "urlaub":
                 skipTurn[player - 1] = true;
@@ -318,17 +334,17 @@ function triggerRandomEvent(player) {
                     let newCol = (c + 1) % COLS;
                     let newRow = getLowestEmptyRow(newCol);
                     if (newRow !== -1) board[newRow][newCol] = player;
-                    eventMessage = "Härtefallantrag! Ein Stein wurde verschoben.";
+                    eventMessage = "Haertefallantrag! Ein Stein wurde verschoben.";
                 }
                 break;
             case "drittversuch":
                 // Spieler darf nochmal ziehen, aber bei Fehlschlag wird ein Stein entfernt
-                eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber du hast einen Stein verloren.";
+                eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein wurde entfernt.";
                 skipTurn[player - 1] = "drittversuch";
                 break;
             case "dekan":
                 let tippCol = Math.floor(Math.random() * COLS) + 1;
-                eventMessage = `Studiendekan-Tipp: "Setze in Spalte ${tippCol}" (aber ist das richtig?)`;
+                eventMessage = `Studiendekan-Tipp: "Setze in Spalte ${tippCol}"`;
                 break;
         }
     } else {
@@ -338,15 +354,15 @@ function triggerRandomEvent(player) {
 
 function triggerEvent(event, player, row, col) {
     switch (event) {
-        case "bafög":
+        case "bafoeg":
             for (let c = 0; c < COLS; c++) board[ROWS - 1][c] = 0;
-            eventMessage = "Bafög gestrichen! Unterste Reihe verloren.";
+            eventMessage = "Bafoeg gestrichen! Unterste Reihe verloren.";
             break;
         case "urlaub":
             skipTurn[player - 1] = true;
             eventMessage = "Urlaubssemester! Du musst eine Runde aussetzen.";
             break;
-        case "härtefall":
+        case "haertefall":
             let ownStones = [];
             for (let r = 0; r < ROWS; r++)
                 for (let c = 0; c < COLS; c++)
@@ -357,16 +373,16 @@ function triggerEvent(event, player, row, col) {
                 let newCol = (c + 1) % COLS;
                 let newRow = getLowestEmptyRow(newCol);
                 if (newRow !== -1) board[newRow][newCol] = player;
-                eventMessage = "Härtefallantrag! Ein Stein wurde verschoben.";
+                eventMessage = "Haertefallantrag! Ein Stein wurde verschoben.";
             }
             break;
         case "drittversuch":
-            eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber du hast einen Stein verloren.";
+            eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein wurde entfernt.";
             skipTurn[player - 1] = "drittversuch";
             break;
         case "dekan":
             let tippCol = Math.floor(Math.random() * COLS) + 1;
-            eventMessage = `Studiendekan-Tipp: "Setze in Spalte ${tippCol}" (aber ist das richtig?)`;
+            eventMessage = `Studiendekan-Tipp: "Setze in Spalte ${tippCol}"`;
             break;
         default:
             eventMessage = "";
@@ -398,9 +414,8 @@ if (chipSound && chipSound.components.sound) {
         let ef = eventFields[i];
         if (ef.r === row && ef.c === col && ef.type !== "leer") {
             triggeredEvent = ef.type;
-            // Entferne das Ereignisfeld nach Auslösung (optional)
             eventFields.splice(i, 1);
-            break;
+            break; // Schleife verlassen!
         }
     }
     if (triggeredEvent) {
@@ -503,7 +518,7 @@ function showGameStatus() {
             if (myPlayerNumber === winner) {
                 showMessage(`Bachelor erhalten! Studi-Legende!\n${info}`);
             } else if (myPlayerNumber === 1 || myPlayerNumber === 2) {
-                showMessage(`Exmatrikuliert! Zu viele Prüfungsversuche.\n${info}`);
+                showMessage(`Exmatrikuliert! Zu viele Pruefungsversuche.\n${info}`);
             } else {
                 showMessage(`Spiel beendet.\n${info}`);
             }
@@ -512,10 +527,39 @@ function showGameStatus() {
         }
     } else {
         showMessage(
-            (eventMessage ? eventMessage + "\n" : "") +
             `Semester: ${semesterCount[0]} / ${semesterCount[1]}\n${info}`
         );
     }
+
+    // Event-Text separat anzeigen (rechts neben dem Board)
+    // Vorher alten Event-Text entfernen
+    let oldEventText = document.getElementById("event-message");
+    if (oldEventText) oldEventText.parentNode.removeChild(oldEventText);
+let oldEventBg = document.getElementById("event-message-bg");
+if (oldEventBg) oldEventBg.parentNode.removeChild(oldEventBg);
+
+if (eventMessage && !gameOver) {
+    // Hintergrund-Plane für Event-Text
+    let eventBg = document.createElement("a-plane");
+    eventBg.setAttribute("id", "event-message-bg");
+    eventBg.setAttribute("width", "12");
+    eventBg.setAttribute("height", "1.2");
+    eventBg.setAttribute("color", "#111");
+    eventBg.setAttribute("opacity", "0.7");
+    eventBg.setAttribute("position", `13 4 -6.01`);
+    let scene = document.querySelector("a-scene");
+    scene.appendChild(eventBg);
+
+    let eventText = document.createElement("a-text");
+    eventText.setAttribute("id", "event-message");
+    eventText.setAttribute("value", eventMessage);
+    eventText.setAttribute("color", "#66ccff");
+    eventText.setAttribute("width", "6");
+    eventText.setAttribute("align", "center");
+    eventText.setAttribute("position", `13 4 -6`);
+    eventText.setAttribute("scale", "2 2 2");
+    scene.appendChild(eventText);
+}
 }
 
 // Hilfsfunktion: Gibt true zurück, wenn einer gewonnen hat
@@ -544,19 +588,20 @@ function addRestartButton() {
         btn.style.padding = "12px 32px";
         btn.style.borderRadius = "24px";
         btn.style.border = "none";
-        btn.style.background = "linear-gradient(90deg,rgb(255, 0, 0) 0%,rgb(255, 255, 0) 100%)";
-        btn.style.color = "#fff";
+        btn.style.background = "linear-gradient(90deg,rgb(255, 255, 0) 100%)";
         btn.style.fontWeight = "bold";
         btn.style.boxShadow = "0 4px 16px rgba(0,0,0,0.18)";
         btn.style.cursor = "pointer";
         btn.style.transition = "background 0.2s, transform 0.2s";
         btn.onmouseenter = () => {
-            btn.style.background = "linear-gradient(90deg, rgb(255, 255, 0) 0%, rgb(255, 0, 0) 100%)";
+            btn.style.background = "linear-gradient(90deg,  rgb(255, 0, 0) 100%)";
             btn.style.transform = "translateX(-50%) scale(1.07)";
+            btn.style.color = "#ffffff";
         };
         btn.onmouseleave = () => {
-            btn.style.background = "linear-gradient(90deg, rgb(255, 0, 0) 0%, rgb(255, 255, 0) 100%)";
+            btn.style.background = "linear-gradient(90deg,  rgb(255, 255, 0) 100%)";
             btn.style.transform = "translateX(-50%) scale(1)";
+            btn.style.color = "#000000";
         };
         btn.onclick = function () {
             if (myPlayerNumber === 1) {
@@ -620,21 +665,29 @@ function showMessage(msg) {
     // Entferne alten Nachrichtentext, falls vorhanden
     let oldMsg = document.getElementById("aframe-message");
     if (oldMsg) oldMsg.parentNode.removeChild(oldMsg);
+    let oldBg = document.getElementById("aframe-message-bg");
+    if (oldBg) oldBg.parentNode.removeChild(oldBg);
+
+    // Hintergrund-Plane
+    let bg = document.createElement("a-plane");
+    bg.setAttribute("id", "aframe-message-bg");
+    bg.setAttribute("width", "8");
+    bg.setAttribute("height", "1.2");
+    bg.setAttribute("color", "#222");
+    bg.setAttribute("opacity", "0.7");
+    bg.setAttribute("position", `${COLS / 2 - 0.5} ${ROWS + 2} -6.01`);
+    let scene = document.querySelector("a-scene");
+    scene.appendChild(bg);
 
     // Erstelle neuen 3D-Text als <a-text>
     let textEntity = document.createElement("a-text");
     textEntity.setAttribute("id", "aframe-message");
     textEntity.setAttribute("value", msg);
-    textEntity.setAttribute("font", "fonts/custom-msdf.json"); // Passe ggf. den Namen an
-    textEntity.setAttribute("font-image", "fonts/custom.png"); // Passe ggf. den Namen an
     textEntity.setAttribute("color", "#FFFFFF");
-    textEntity.setAttribute("width", "10");
+    textEntity.setAttribute("width", "6");
     textEntity.setAttribute("align", "center");
-    textEntity.setAttribute("position", `${COLS / 2 - 0.5} ${ROWS + 3} -6`);
-    textEntity.setAttribute("scale", "1 1 1");
-
-    // Füge den Text zur Szene hinzu
-    let scene = document.querySelector("a-scene");
+    textEntity.setAttribute("position", `${COLS / 2 - 0.5} ${ROWS + 2} -6`);
+    textEntity.setAttribute("scale", "2 2 2");
     scene.appendChild(textEntity);
 }
 
