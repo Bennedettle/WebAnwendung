@@ -149,7 +149,7 @@ function renderBoard() {
     boardBg.setAttribute("height", ROWS);
     boardBg.setAttribute("width", COLS);
     boardBg.setAttribute("color", "#2255aa");
-    boardBg.setAttribute("opacity", "0.95");
+    boardBg.setAttribute("opacity", "0");
     content.appendChild(boardBg);
 
     // Scheiben und Ereignisfelder
@@ -173,6 +173,7 @@ function renderBoard() {
                 chip.setAttribute("color", "#FFFF00");
             } else {
                 chip.setAttribute("color", "#eee");
+                chip.setAttribute("opacity", "0");
             }
             content.appendChild(chip);
         }
@@ -214,7 +215,7 @@ function renderBoard() {
             colPlane.setAttribute("opacity", "0.001");
             colPlane.setAttribute("position", `${c} ${(ROWS - 1) / 2} -6`);
             colPlane.setAttribute("side", "double");
-            colPlane.setAttribute("class", "hoverable");
+            colPlane.setAttribute("class", "clickable");
             let scene = document.querySelector("a-scene");
             scene.appendChild(colPlane);
 
@@ -270,11 +271,11 @@ function triggerRandomEvent(player) {
             case "bafög":
                 // Unterste Reihe löschen
                 for (let c = 0; c < COLS; c++) board[ROWS - 1][c] = 0;
-                eventMessage = "📉 Bafög gestrichen! Unterste Reihe verloren.";
+                eventMessage = "Bafög gestrichen! Unterste Reihe verloren.";
                 break;
             case "urlaub":
                 skipTurn[player - 1] = true;
-                eventMessage = "🧳 Urlaubssemester! Du musst eine Runde aussetzen.";
+                eventMessage = "Urlaubssemester! Du musst eine Runde aussetzen.";
                 break;
             case "haertefall":
                 // Härtefall: eigenen Stein verschieben
@@ -288,17 +289,17 @@ function triggerRandomEvent(player) {
                     let newCol = (c + 1) % COLS;
                     let newRow = getLowestEmptyRow(newCol);
                     if (newRow !== -1) board[newRow][newCol] = player;
-                    eventMessage = "🔁 Härtefallantrag! Ein Stein wurde verschoben.";
+                    eventMessage = "Härtefallantrag! Ein Stein wurde verschoben.";
                 }
                 break;
             case "drittversuch":
                 // Spieler darf nochmal ziehen, aber bei Fehlschlag wird ein Stein entfernt
-                eventMessage = "⚠️ Drittversuch! Du darfst nochmal ziehen, aber du hast einen Stein verloren.";
+                eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber du hast einen Stein verloren.";
                 skipTurn[player - 1] = "drittversuch";
                 break;
             case "dekan":
                 let tippCol = Math.floor(Math.random() * COLS) + 1;
-                eventMessage = `🧓 Studiendekan-Tipp: "Setze in Spalte ${tippCol}" (aber ist das richtig?)`;
+                eventMessage = `Studiendekan-Tipp: "Setze in Spalte ${tippCol}" (aber ist das richtig?)`;
                 break;
         }
     } else {
@@ -310,11 +311,11 @@ function triggerEvent(event, player, row, col) {
     switch (event) {
         case "bafög":
             for (let c = 0; c < COLS; c++) board[ROWS - 1][c] = 0;
-            eventMessage = "📉 Bafög gestrichen! Unterste Reihe verloren.";
+            eventMessage = "Bafög gestrichen! Unterste Reihe verloren.";
             break;
         case "urlaub":
             skipTurn[player - 1] = true;
-            eventMessage = "🧳 Urlaubssemester! Du musst eine Runde aussetzen.";
+            eventMessage = "Urlaubssemester! Du musst eine Runde aussetzen.";
             break;
         case "haertefall":
             let ownStones = [];
@@ -327,16 +328,16 @@ function triggerEvent(event, player, row, col) {
                 let newCol = (c + 1) % COLS;
                 let newRow = getLowestEmptyRow(newCol);
                 if (newRow !== -1) board[newRow][newCol] = player;
-                eventMessage = "🔁 Härtefallantrag! Ein Stein wurde verschoben.";
+                eventMessage = "Härtefallantrag! Ein Stein wurde verschoben.";
             }
             break;
         case "drittversuch":
-            eventMessage = "⚠️ Drittversuch! Du darfst nochmal ziehen, aber du hast einen Stein verloren.";
+            eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber du hast einen Stein verloren.";
             skipTurn[player - 1] = "drittversuch";
             break;
         case "dekan":
             let tippCol = Math.floor(Math.random() * COLS) + 1;
-            eventMessage = `🧓 Studiendekan-Tipp: "Setze in Spalte ${tippCol}" (aber ist das richtig?)`;
+            eventMessage = `Studiendekan-Tipp: "Setze in Spalte ${tippCol}" (aber ist das richtig?)`;
             break;
         default:
             eventMessage = "";
@@ -384,7 +385,7 @@ for (let r = ROWS - 1; r >= 0; r--) {
     }
     if (removed) break;
 }
-eventMessage = "⚠️ Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein wurde entfernt.";
+eventMessage = "Drittversuch! Du darfst nochmal ziehen, aber dein erster Stein wurde entfernt.";
             // NICHT Spieler wechseln, sondern return: Spieler darf nochmal!
             sendRequest('*broadcast-message*', ['move', { board, currentPlayer, gameOver, semesterCount, skipTurn, eventMessage, eventFields }]);
             renderBoard();
@@ -462,7 +463,7 @@ function showGameStatus() {
 
         if (winner) {
             if (myPlayerNumber === winner) {
-                showMessage(`🎓 Bachelor erhalten! Studi-Legende!\n${info}`);
+                showMessage(`Bachelor erhalten! Studi-Legende!\n${info}`);
             } else if (myPlayerNumber === 1 || myPlayerNumber === 2) {
                 showMessage(`Exmatrikuliert! Zu viele Prüfungsversuche.\n${info}`);
             } else {
@@ -496,7 +497,7 @@ function addRestartButton() {
     if (!btn) {
         btn = document.createElement("button");
         btn.id = "restartBtn";
-        btn.innerText = "🔄 Neustart";
+        btn.innerText = "Neustart";
         btn.style.position = "absolute";
         btn.style.top = "30px";
         btn.style.left = "50%";
